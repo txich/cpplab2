@@ -1,5 +1,13 @@
 #include "recursive_graph_collections.h"
 
+#include <limits.h>
+
+#include <map>
+#include <set>
+#include <string>
+#include <unordered_map>
+#include <utility>
+
 #ifndef LEVEL_MAX
 #define LEVEL_MAX 4
 #endif
@@ -13,10 +21,23 @@ namespace {
 }  // namespace
 
 namespace cxx {
+using namespace std;
 
-long rgc_new_collection(void) {}
+// Global containers for collections.
+unordered_map<long, map<string, map<int, set<pair<int, int>>>>> collections;
+long current_id = 0;
 
-void rgc_delete_collection(long id) {}
+long rgc_new_collection(void) {
+	if (current_id >= LONG_MAX)
+		return -1;
+
+	collections[current_id] = map<string, map<int, set<pair<int, int>>>>();
+	return current_id++;
+}
+
+void rgc_delete_collection(long id) {
+	collections.erase(id);
+}
 
 ssize_t rgc_size(long id) {}
 
