@@ -22,6 +22,11 @@ using Graph = std::map<Node, Neighbours>;
 using Collection = std::map<std::string, Graph>;
 using Collections = std::unordered_map<long, Collection>;
 
+Collections &collections() {
+	static Collections data;
+	return data;
+}
+
 // Tutaj należy umieścić prywatne typy i funkcje pomocnicze modułu.
 // Kontenery kolekcji należy inicjować jako lokalne zmienne statyczne
 // w funkcji pomocniczej, aby uniknąć problemu kolejności inicjalizacji.
@@ -30,11 +35,6 @@ using Collections = std::unordered_map<long, Collection>;
 namespace cxx {
 using namespace std;
 // Global containers for collections.
-
-Collections collections() {
-	static Collections a;
-	return a;
-}
 
 long rgc_new_collection(void) {
 	static long id = 0;
@@ -49,9 +49,17 @@ void rgc_delete_collection(long id) {
 	collections().erase(id);
 }
 
-ssize_t rgc_size(long id) {}
+ssize_t rgc_size(long id) {
+	auto &all = collections();
+	auto it = all.find(id);
 
-bool rgc_new_graph(long id, char const *name, int n) {}
+	if (it == all.end())
+		return -1;
+
+	return static_cast<ssize_t>(it->second.size());
+}  // Anton
+
+bool rgc_new_graph(long id, char const *name, int n) {}	 // Oliwer
 
 void rgc_delete_graph(long id, char const *name) {}
 
