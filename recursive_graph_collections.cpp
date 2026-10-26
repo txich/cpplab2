@@ -119,9 +119,27 @@ bool rgc_graph_delete_edge(long id, char const *name, int x, int y) {
 	return true;
 }
 
-char const *rgc_first_graph(long id) {}
+char const *rgc_first_graph(long id) {}	 // Oliwier
 
-char const *rgc_next_graph(long id, char const *name) {}
+char const *rgc_next_graph(long id, char const *name) {
+	if (name == nullptr)
+		return nullptr;
+
+	auto &all = collections();
+	auto col = all.find(id);
+	if (col == all.end())
+		return nullptr;
+
+	auto iter = col->second.find(name);
+	if (iter == col->second.end())
+		return nullptr;
+
+	iter++;
+	if (iter == col->second.end())
+		return nullptr;
+
+	return iter->first.c_str();
+}
 
 int rgc_first_node(long id, char const *name) {}
 
