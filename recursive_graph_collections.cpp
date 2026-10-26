@@ -29,21 +29,24 @@ using Collections = std::unordered_map<long, Collection>;
 
 namespace cxx {
 using namespace std;
-
 // Global containers for collections.
-Collections collections;
-long current_id = 0;
+
+Collections collections() {
+	static Collections a;
+	return a;
+}
 
 long rgc_new_collection(void) {
-	if (current_id >= LONG_MAX)
+	static long id = 0;
+	if (id >= LONG_MAX)
 		return -1;
 
-	collections[current_id] = Collection();
-	return current_id++;
+	collections()[id] = Collection();
+	return id++;
 }
 
 void rgc_delete_collection(long id) {
-	collections.erase(id);
+	collections().erase(id);
 }
 
 ssize_t rgc_size(long id) {}
