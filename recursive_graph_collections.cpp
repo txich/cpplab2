@@ -51,25 +51,73 @@ void rgc_delete_collection(long id) {
 
 ssize_t rgc_size(long id) {
 	auto &all = collections();
-	auto it = all.find(id);
+	auto col = all.find(id);
 
-	if (it == all.end())
+	if (col == all.end())
 		return -1;
 
-	return static_cast<ssize_t>(it->second.size());
-}  // Anton
+	return static_cast<ssize_t>(col->second.size());
+}
 
-bool rgc_new_graph(long id, char const *name, int n) {}	 // Oliwer
+bool rgc_new_graph(long id, char const *name, int n) {}	 // Oliwier
 
-void rgc_delete_graph(long id, char const *name) {}
+void rgc_delete_graph(long id, char const *name) {
+	if (name == nullptr)
+		return;
 
-int rgc_graph_new_node(long id, char const *name) {}
+	auto &all = collections();
+	auto col = all.find(id);
+	if (col == all.end())
+		return;
+	col->second.erase(name);
+}
 
-bool rgc_graph_delete_node(long id, char const *name, int x) {}
+int rgc_graph_new_node(long id, char const *name) {}  // Oliwier
 
-bool rgc_graph_add_edge(long id, char const *name, int x, int y) {}
+bool rgc_graph_delete_node(long id, char const *name, int x) {
+	if (name == nullptr)
+		return false;
 
-bool rgc_graph_delete_edge(long id, char const *name, int x, int y) {}
+	auto &all = collections();
+	auto col = all.find(id);
+	if (col == all.end())
+		return false;
+
+	auto graph = col->second.find(name);
+	if (graph == col->second.end())
+		return false;
+	if (graph->second.erase(x) == 0)
+		return false;
+	for (auto &v : graph->second)
+		v.second.erase(x);
+	return true;
+}
+
+bool rgc_graph_add_edge(long id, char const *name, int x, int y) {}	 // Oliwier
+
+bool rgc_graph_delete_edge(long id, char const *name, int x, int y) {
+	if (name == nullptr)
+		return false;
+
+	auto &all = collections();
+	auto col = all.find(id);
+	if (col == all.end())
+		return false;
+
+	auto graph = col->second.find(name);
+	if (graph == col->second.end())
+		return false;
+	auto &nodes = graph->second;
+	auto node_x = nodes.find(x);
+	auto node_y = nodes.find(y);
+	if (node_x == nodes.end() || node_y == nodes.end())
+		return false;
+
+	if (node_x->second.erase(y) == 0)
+		return false;
+	node_y->second.erase(x);
+	return true;
+}
 
 char const *rgc_first_graph(long id) {}
 
