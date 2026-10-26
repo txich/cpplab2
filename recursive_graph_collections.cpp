@@ -15,6 +15,13 @@
 static_assert(LEVEL_MAX > 0, "LEVEL_MAX musi byc dodatnie");
 
 namespace {
+using Node = int;
+using Level = ssize_t;
+using Neighbours = std::map<Node, Level>;
+using Graph = std::map<Node, Neighbours>;
+using Collection = std::map<std::string, Graph>;
+using Collections = std::unordered_map<long, Collection>;
+
 // Tutaj należy umieścić prywatne typy i funkcje pomocnicze modułu.
 // Kontenery kolekcji należy inicjować jako lokalne zmienne statyczne
 // w funkcji pomocniczej, aby uniknąć problemu kolejności inicjalizacji.
@@ -24,14 +31,14 @@ namespace cxx {
 using namespace std;
 
 // Global containers for collections.
-unordered_map<long, map<string, map<int, set<pair<int, int>>>>> collections;
+Collections collections;
 long current_id = 0;
 
 long rgc_new_collection(void) {
 	if (current_id >= LONG_MAX)
 		return -1;
 
-	collections[current_id] = map<string, map<int, set<pair<int, int>>>>();
+	collections[current_id] = Collection();
 	return current_id++;
 }
 
