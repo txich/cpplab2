@@ -27,6 +27,7 @@ Collections &collections() {
 	return data;
 }
 
+// FUNKCJE POMOCNICZE
 Collection *find_collection(long id) {
 	auto &all = collections();
 	auto it = all.find(id);
@@ -50,12 +51,14 @@ namespace cxx {
 using namespace std;
 
 long rgc_new_collection(void) {
-	static long id = 0;
-	if (id >= LONG_MAX)
+	static long next_id = 0;
+	if (next_id == -1)
 		return -1;
 
-	collections()[id] = Collection();
-	return id++;
+	const long id = next_id;
+	collections().try_emplace(id);
+	next_id = id == LONG_MAX ? -1 : id + 1;
+	return id;
 }
 
 void rgc_delete_collection(long id) {
@@ -88,10 +91,12 @@ bool rgc_graph_delete_node(long id, char const *name, int x) {
 	auto *graph = find_graph(id, name);
 	if (graph == nullptr)
 		return false;
-	if (graph->erase(x) == 0)
+	auto node = graph->find(x);
+	if (node == graph->end())
 		return false;
-	for (auto &v : *graph)
-		v.second.erase(x);
+	for (auto const &[neighbour, level] : node->second)
+		graph->at(neighbour).erase(x);
+	graph->erase(node);
 	return true;
 }
 
@@ -167,16 +172,39 @@ int rgc_next_edge(long id, char const *name, int x, int y) {
 
 bool rgc_replace_edge(long id, char const *result_name,
 					  char const *recipient_name, int w_1, int w_2,
-					  char const *donor_name, int v_1, int v_2) {}
+					  char const *donor_name, int v_1, int v_2) {}	// Oliwier
 
-ssize_t rgc_edge_level(long id, char const *name, int x, int y) {}
+ssize_t rgc_edge_level(long id, char const *name, int x, int y) {
+	auto *graph = find_graph(id, name);
+	if (graph == nullptr)
+		return -1;
+	auto node_x = graph->find(x);
+	if (node_x == graph->end())
+		return -1;
+	auto node_y = node_x->second.find(y);
+	if (node_y == node_x->second.end())
+		return -1;
+	return node_y->second;
+}
 
-ssize_t rgc_graph_level(long id, char const *name) {}
+ssize_t rgc_graph_level(long id, char const *name) {}  // Oliwier
 
-ssize_t rgc_max_level(void) {}
+ssize_t rgc_max_level(void) {
+	return LEVEL_MAX - 1;
+}
 
-ssize_t rgc_count_nodes(long id, char const *name) {}
+ssize_t rgc_count_nodes(long id, char const *name) {}  // Oliwier
 
-ssize_t rgc_count_edges(long id, char const *name) {}
+ssize_t rgc_count_edges(long id, char const *name) {
+	auto *graph = find_graph(id, name);
+	if (graph == nullptr)
+		return -1;
+
+	size_t count = 0;
+	for (auto const &[node, neighbours] : *graph)
+		count += neighbours.size();
+
+	return static_cast<ssize_t>(count / 2);
+}
 
 }  // namespace cxx
