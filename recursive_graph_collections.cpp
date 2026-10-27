@@ -27,14 +27,27 @@ Collections &collections() {
 	return data;
 }
 
-// Tutaj należy umieścić prywatne typy i funkcje pomocnicze modułu.
-// Kontenery kolekcji należy inicjować jako lokalne zmienne statyczne
-// w funkcji pomocniczej, aby uniknąć problemu kolejności inicjalizacji.
+Collection *find_collection(long id) {
+	auto &all = collections();
+	auto it = all.find(id);
+	return it == all.end() ? nullptr : &it->second;
+}
+
+Graph *find_graph(long id, char const *name) {
+	if (name == nullptr)
+		return nullptr;
+
+	auto *collection = find_collection(id);
+	if (collection == nullptr)
+		return nullptr;
+
+	auto it = collection->find(name);
+	return it == collection->end() ? nullptr : &it->second;
+}
 }  // namespace
 
 namespace cxx {
 using namespace std;
-// Global containers for collections.
 
 long rgc_new_collection(void) {
 	static long id = 0;
@@ -50,13 +63,11 @@ void rgc_delete_collection(long id) {
 }
 
 ssize_t rgc_size(long id) {
-	auto &all = collections();
-	auto col = all.find(id);
-
-	if (col == all.end())
+	auto *collection = find_collection(id);
+	if (collection == nullptr)
 		return -1;
 
-	return static_cast<ssize_t>(col->second.size());
+	return static_cast<ssize_t>(collection->size());
 }
 
 bool rgc_new_graph(long id, char const *name, int n) {}	 // Oliwier
@@ -65,30 +76,21 @@ void rgc_delete_graph(long id, char const *name) {
 	if (name == nullptr)
 		return;
 
-	auto &all = collections();
-	auto col = all.find(id);
-	if (col == all.end())
+	auto *collection = find_collection(id);
+	if (collection == nullptr)
 		return;
-	col->second.erase(name);
+	collection->erase(name);
 }
 
 int rgc_graph_new_node(long id, char const *name) {}  // Oliwier
 
 bool rgc_graph_delete_node(long id, char const *name, int x) {
-	if (name == nullptr)
+	auto *graph = find_graph(id, name);
+	if (graph == nullptr)
 		return false;
-
-	auto &all = collections();
-	auto col = all.find(id);
-	if (col == all.end())
+	if (graph->erase(x) == 0)
 		return false;
-
-	auto graph = col->second.find(name);
-	if (graph == col->second.end())
-		return false;
-	if (graph->second.erase(x) == 0)
-		return false;
-	for (auto &v : graph->second)
+	for (auto &v : *graph)
 		v.second.erase(x);
 	return true;
 }
@@ -96,21 +98,12 @@ bool rgc_graph_delete_node(long id, char const *name, int x) {
 bool rgc_graph_add_edge(long id, char const *name, int x, int y) {}	 // Oliwier
 
 bool rgc_graph_delete_edge(long id, char const *name, int x, int y) {
-	if (name == nullptr)
+	auto *graph = find_graph(id, name);
+	if (graph == nullptr)
 		return false;
-
-	auto &all = collections();
-	auto col = all.find(id);
-	if (col == all.end())
-		return false;
-
-	auto graph = col->second.find(name);
-	if (graph == col->second.end())
-		return false;
-	auto &nodes = graph->second;
-	auto node_x = nodes.find(x);
-	auto node_y = nodes.find(y);
-	if (node_x == nodes.end() || node_y == nodes.end())
+	auto node_x = graph->find(x);
+	auto node_y = graph->find(y);
+	if (node_x == graph->end() || node_y == graph->end())
 		return false;
 
 	if (node_x->second.erase(y) == 0)
@@ -125,29 +118,52 @@ char const *rgc_next_graph(long id, char const *name) {
 	if (name == nullptr)
 		return nullptr;
 
-	auto &all = collections();
-	auto col = all.find(id);
-	if (col == all.end())
+	auto *collection = find_collection(id);
+	if (collection == nullptr)
 		return nullptr;
 
-	auto iter = col->second.find(name);
-	if (iter == col->second.end())
+	auto iter = collection->find(name);
+	if (iter == collection->end())
 		return nullptr;
 
 	iter++;
-	if (iter == col->second.end())
+	if (iter == collection->end())
 		return nullptr;
 
 	return iter->first.c_str();
 }
 
-int rgc_first_node(long id, char const *name) {}
+int rgc_first_node(long id, char const *name) {}  // Oliwier
 
-int rgc_next_node(long id, char const *name, int x) {}
+int rgc_next_node(long id, char const *name, int x) {
+	auto *graph = find_graph(id, name);
+	if (graph == nullptr)
+		return -1;
 
-int rgc_first_edge(long id, char const *name, int x) {}
+	auto iter = graph->upper_bound(x);
+	if (iter == graph->end())
+		return -1;
 
-int rgc_next_edge(long id, char const *name, int x, int y) {}
+	return iter->first;
+}
+
+int rgc_first_edge(long id, char const *name, int x) {}	 // Oliwier
+
+int rgc_next_edge(long id, char const *name, int x, int y) {
+	auto *graph = find_graph(id, name);
+	if (graph == nullptr)
+		return -1;
+
+	auto iter = graph->find(x);
+	if (iter == graph->end())
+		return -1;
+
+	auto node_y = iter->second.upper_bound(y);
+	if (node_y == iter->second.end())
+		return -1;
+
+	return node_y->first;
+}
 
 bool rgc_replace_edge(long id, char const *result_name,
 					  char const *recipient_name, int w_1, int w_2,
