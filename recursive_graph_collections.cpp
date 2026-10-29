@@ -234,7 +234,13 @@ namespace cxx {
 	}
 
 	int rgc_first_node(long id, char const *name) {
-		
+		auto *graph = find_graph(id, name);
+
+		if (graph != nullptr && !graph->empty()) {
+			return graph->begin()->first;
+		}
+
+		return -1;
 	}  // Oliwier
 
 	int rgc_next_node(long id, char const *name, int x) {
@@ -249,7 +255,18 @@ namespace cxx {
 		return iter->first;
 	}
 
-	int rgc_first_edge(long id, char const *name, int x) {}	 // Oliwier
+	int rgc_first_edge(long id, char const *name, int x) {
+		auto *graph = find_graph(id, name);
+
+		if (graph != nullptr) {
+			auto it = graph->find(x);
+			if (it != graph->end() && !it->second.empty()) {
+				return it->second.begin()->first;
+			}
+		}
+
+		return -1;
+	}	 // Oliwier
 
 	int rgc_next_edge(long id, char const *name, int x, int y) {
 		auto *graph = find_graph(id, name);
