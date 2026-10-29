@@ -7,6 +7,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <cstddef>
 
 #ifndef LEVEL_MAX
 #define LEVEL_MAX 4
@@ -21,6 +22,8 @@ namespace {
 	using Graph = std::map<Node, Neighbours>;
 	using Collection = std::map<std::string, Graph>;
 	using Collections = std::unordered_map<long, Collection>;
+
+	constexpr Level POCZATKOWY_POZIOM = 0;
 
 	Collections &collections() {
 		static Collections data;
@@ -108,7 +111,6 @@ namespace cxx {
 			if (inserted) {
 				auto &graph = it->second;
 
-
 				for (int i = 0; i < n; ++i) {
 					graph.try_emplace(i);
 				}
@@ -130,7 +132,24 @@ namespace cxx {
 		collection->erase(name);
 	}
 
-	int rgc_graph_new_node(long id, char const *name) {}  // Oliwier
+	int rgc_graph_new_node(long id, char const *name) {
+		auto *graph = find_graph(id, name);
+
+		if (graph != nullptr && graph->size() < static_cast<size_t>(INT_MAX)) {
+			int new_node = 0;
+			auto it = graph->begin();
+
+			while (it != graph->end() && it->first == new_node) {
+				++new_node;
+				++it;
+			}
+
+			graph->try_emplace(new_node);
+			return new_node;
+		}
+
+		return -1;
+	}  // Oliwier
 
 	bool rgc_graph_delete_node(long id, char const *name, int x) {
 		auto *graph = find_graph(id, name);
@@ -145,7 +164,30 @@ namespace cxx {
 		return true;
 	}
 
-	bool rgc_graph_add_edge(long id, char const *name, int x, int y) {}	 // Oliwier
+	bool rgc_graph_add_edge(long id, char const *name, int x, int y) {
+		auto *graph = find_graph(id, name);
+
+		if (graph != nullptr) {
+			auto it_x = graph->find(x);
+			if (it_x != graph->end()) {
+				auto it_y = graph->find(y);
+				if (it_y != graph->end() && it_x != it_y) {
+
+					// Wystarczy, że jeden z węzłów x, y
+					// nie ma drugiego wśród sąsiadów,
+					// ponieważ graf jest nieskierowany.
+					if (!it_x->second.contains(y)) {
+						it_x->second.try_emplace(y, POCZATKOWY_POZIOM);
+						it_y->second.try_emplace(x, POCZATKOWY_POZIOM);
+
+						return true;
+					}
+				}
+			}
+		}
+
+		return false;
+	}	 // Oliwier
 
 	bool rgc_graph_delete_edge(long id, char const *name, int x, int y) {
 		auto *graph = find_graph(id, name);
@@ -162,7 +204,15 @@ namespace cxx {
 		return true;
 	}
 
-	char const *rgc_first_graph(long id) {}	 // Oliwier
+	char const *rgc_first_graph(long id) {
+		auto *collection = find_collection(id);
+		
+		if (collection != nullptr && !collection->empty()) {
+			return collection->begin()->first.c_str();
+		}
+
+		return nullptr;
+	}	 // Oliwier
 
 	char const *rgc_next_graph(long id, char const *name) {
 		if (name == nullptr)
@@ -183,7 +233,9 @@ namespace cxx {
 		return iter->first.c_str();
 	}
 
-	int rgc_first_node(long id, char const *name) {}  // Oliwier
+	int rgc_first_node(long id, char const *name) {
+		
+	}  // Oliwier
 
 	int rgc_next_node(long id, char const *name, int x) {
 		auto *graph = find_graph(id, name);
