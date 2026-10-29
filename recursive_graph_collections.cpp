@@ -15,196 +15,241 @@
 static_assert(LEVEL_MAX > 0, "LEVEL_MAX musi byc dodatnie");
 
 namespace {
-using Node = int;
-using Level = ssize_t;
-using Neighbours = std::map<Node, Level>;
-using Graph = std::map<Node, Neighbours>;
-using Collection = std::map<std::string, Graph>;
-using Collections = std::unordered_map<long, Collection>;
+	using Node = int;
+	using Level = ssize_t;
+	using Neighbours = std::map<Node, Level>;
+	using Graph = std::map<Node, Neighbours>;
+	using Collection = std::map<std::string, Graph>;
+	using Collections = std::unordered_map<long, Collection>;
 
-Collections &collections() {
-	static Collections data;
-	return data;
-}
+	Collections &collections() {
+		static Collections data;
+		return data;
+	}
 
-// FUNKCJE POMOCNICZE
-Collection *find_collection(long id) {
-	auto &all = collections();
-	auto it = all.find(id);
-	return it == all.end() ? nullptr : &it->second;
-}
+	// FUNKCJE POMOCNICZE
+	Collection *find_collection(long id) {
+		auto &all = collections();
+		auto it = all.find(id);
+		return it == all.end() ? nullptr : &it->second;
+	}
 
-Graph *find_graph(long id, char const *name) {
-	if (name == nullptr)
-		return nullptr;
+	Graph *find_graph(long id, char const *name) {
+		if (name == nullptr)
+			return nullptr;
 
-	auto *collection = find_collection(id);
-	if (collection == nullptr)
-		return nullptr;
+		auto *collection = find_collection(id);
+		if (collection == nullptr)
+			return nullptr;
 
-	auto it = collection->find(name);
-	return it == collection->end() ? nullptr : &it->second;
-}
+		auto it = collection->find(name);
+		return it == collection->end() ? nullptr : &it->second;
+	}
+
+	bool is_name_correct(char const *name) {
+		if (name != nullptr) {
+			size_t i = 0;
+			char znak = name[i];
+
+			while (znak != '\0') {
+				if (!((znak >= 'a' && znak <= 'z') ||
+					(znak >= 'A' && znak <= 'Z') ||
+					(znak >= '0' && znak <= '9') ||
+					znak == '_')) {
+					return false;
+				}
+				++i;
+				znak = name[i];
+			}
+
+			if (i == 0) { // Jeżeli i jest równe 0, to słowo jest puste.
+				return false;
+			}
+		}
+		else {
+			return false;
+		}
+
+		return true;
+	}
 }  // namespace
 
 namespace cxx {
-using namespace std;
+	using namespace std;
 
-long rgc_new_collection(void) {
-	static long next_id = 0;
-	if (next_id == -1)
-		return -1;
+	long rgc_new_collection(void) {
+		static long next_id = 0;
+		if (next_id == -1)
+			return -1;
 
-	const long id = next_id;
-	collections().try_emplace(id);
-	next_id = id == LONG_MAX ? -1 : id + 1;
-	return id;
-}
+		const long id = next_id;
+		collections().try_emplace(id);
+		next_id = id == LONG_MAX ? -1 : id + 1;
+		return id;
+	}
 
-void rgc_delete_collection(long id) {
-	collections().erase(id);
-}
+	void rgc_delete_collection(long id) {
+		collections().erase(id);
+	}
 
-ssize_t rgc_size(long id) {
-	auto *collection = find_collection(id);
-	if (collection == nullptr)
-		return -1;
+	ssize_t rgc_size(long id) {
+		auto *collection = find_collection(id);
+		if (collection == nullptr)
+			return -1;
 
-	return static_cast<ssize_t>(collection->size());
-}
+		return static_cast<ssize_t>(collection->size());
+	}
 
-bool rgc_new_graph(long id, char const *name, int n) {}	 // Oliwier
+	bool rgc_new_graph(long id, char const *name, int n) {
+		auto *collection = find_collection(id);
 
-void rgc_delete_graph(long id, char const *name) {
-	if (name == nullptr)
-		return;
+		if (collection != nullptr && is_name_correct(name) && n >= 0) {		
+			auto [it, inserted] = collection->try_emplace(name);
+			if (inserted) {
+				auto &graph = it->second;
 
-	auto *collection = find_collection(id);
-	if (collection == nullptr)
-		return;
-	collection->erase(name);
-}
 
-int rgc_graph_new_node(long id, char const *name) {}  // Oliwier
+				for (int i = 0; i < n; ++i) {
+					graph.try_emplace(i);
+				}
 
-bool rgc_graph_delete_node(long id, char const *name, int x) {
-	auto *graph = find_graph(id, name);
-	if (graph == nullptr)
+				return true;
+			}
+		}
+
 		return false;
-	auto node = graph->find(x);
-	if (node == graph->end())
-		return false;
-	for (auto const &[neighbour, level] : node->second)
-		graph->at(neighbour).erase(x);
-	graph->erase(node);
-	return true;
-}
+	} // Oliwier
 
-bool rgc_graph_add_edge(long id, char const *name, int x, int y) {}	 // Oliwier
+	void rgc_delete_graph(long id, char const *name) {
+		if (name == nullptr)
+			return;
 
-bool rgc_graph_delete_edge(long id, char const *name, int x, int y) {
-	auto *graph = find_graph(id, name);
-	if (graph == nullptr)
-		return false;
-	auto node_x = graph->find(x);
-	auto node_y = graph->find(y);
-	if (node_x == graph->end() || node_y == graph->end())
-		return false;
+		auto *collection = find_collection(id);
+		if (collection == nullptr)
+			return;
+		collection->erase(name);
+	}
 
-	if (node_x->second.erase(y) == 0)
-		return false;
-	node_y->second.erase(x);
-	return true;
-}
+	int rgc_graph_new_node(long id, char const *name) {}  // Oliwier
 
-char const *rgc_first_graph(long id) {}	 // Oliwier
+	bool rgc_graph_delete_node(long id, char const *name, int x) {
+		auto *graph = find_graph(id, name);
+		if (graph == nullptr)
+			return false;
+		auto node = graph->find(x);
+		if (node == graph->end())
+			return false;
+		for (auto const &[neighbour, level] : node->second)
+			graph->at(neighbour).erase(x);
+		graph->erase(node);
+		return true;
+	}
 
-char const *rgc_next_graph(long id, char const *name) {
-	if (name == nullptr)
-		return nullptr;
+	bool rgc_graph_add_edge(long id, char const *name, int x, int y) {}	 // Oliwier
 
-	auto *collection = find_collection(id);
-	if (collection == nullptr)
-		return nullptr;
+	bool rgc_graph_delete_edge(long id, char const *name, int x, int y) {
+		auto *graph = find_graph(id, name);
+		if (graph == nullptr)
+			return false;
+		auto node_x = graph->find(x);
+		auto node_y = graph->find(y);
+		if (node_x == graph->end() || node_y == graph->end())
+			return false;
 
-	auto iter = collection->find(name);
-	if (iter == collection->end())
-		return nullptr;
+		if (node_x->second.erase(y) == 0)
+			return false;
+		node_y->second.erase(x);
+		return true;
+	}
 
-	iter++;
-	if (iter == collection->end())
-		return nullptr;
+	char const *rgc_first_graph(long id) {}	 // Oliwier
 
-	return iter->first.c_str();
-}
+	char const *rgc_next_graph(long id, char const *name) {
+		if (name == nullptr)
+			return nullptr;
 
-int rgc_first_node(long id, char const *name) {}  // Oliwier
+		auto *collection = find_collection(id);
+		if (collection == nullptr)
+			return nullptr;
 
-int rgc_next_node(long id, char const *name, int x) {
-	auto *graph = find_graph(id, name);
-	if (graph == nullptr)
-		return -1;
+		auto iter = collection->find(name);
+		if (iter == collection->end())
+			return nullptr;
 
-	auto iter = graph->upper_bound(x);
-	if (iter == graph->end())
-		return -1;
+		iter++;
+		if (iter == collection->end())
+			return nullptr;
 
-	return iter->first;
-}
+		return iter->first.c_str();
+	}
 
-int rgc_first_edge(long id, char const *name, int x) {}	 // Oliwier
+	int rgc_first_node(long id, char const *name) {}  // Oliwier
 
-int rgc_next_edge(long id, char const *name, int x, int y) {
-	auto *graph = find_graph(id, name);
-	if (graph == nullptr)
-		return -1;
+	int rgc_next_node(long id, char const *name, int x) {
+		auto *graph = find_graph(id, name);
+		if (graph == nullptr)
+			return -1;
 
-	auto iter = graph->find(x);
-	if (iter == graph->end())
-		return -1;
+		auto iter = graph->upper_bound(x);
+		if (iter == graph->end())
+			return -1;
 
-	auto node_y = iter->second.upper_bound(y);
-	if (node_y == iter->second.end())
-		return -1;
+		return iter->first;
+	}
 
-	return node_y->first;
-}
+	int rgc_first_edge(long id, char const *name, int x) {}	 // Oliwier
 
-bool rgc_replace_edge(long id, char const *result_name,
-					  char const *recipient_name, int w_1, int w_2,
-					  char const *donor_name, int v_1, int v_2) {}	// Oliwier
+	int rgc_next_edge(long id, char const *name, int x, int y) {
+		auto *graph = find_graph(id, name);
+		if (graph == nullptr)
+			return -1;
 
-ssize_t rgc_edge_level(long id, char const *name, int x, int y) {
-	auto *graph = find_graph(id, name);
-	if (graph == nullptr)
-		return -1;
-	auto node_x = graph->find(x);
-	if (node_x == graph->end())
-		return -1;
-	auto node_y = node_x->second.find(y);
-	if (node_y == node_x->second.end())
-		return -1;
-	return node_y->second;
-}
+		auto iter = graph->find(x);
+		if (iter == graph->end())
+			return -1;
 
-ssize_t rgc_graph_level(long id, char const *name) {}  // Oliwier
+		auto node_y = iter->second.upper_bound(y);
+		if (node_y == iter->second.end())
+			return -1;
 
-ssize_t rgc_max_level(void) {
-	return LEVEL_MAX - 1;
-}
+		return node_y->first;
+	}
 
-ssize_t rgc_count_nodes(long id, char const *name) {}  // Oliwier
+	bool rgc_replace_edge(long id, char const *result_name,
+						char const *recipient_name, int w_1, int w_2,
+						char const *donor_name, int v_1, int v_2) {}	// Oliwier
 
-ssize_t rgc_count_edges(long id, char const *name) {
-	auto *graph = find_graph(id, name);
-	if (graph == nullptr)
-		return -1;
+	ssize_t rgc_edge_level(long id, char const *name, int x, int y) {
+		auto *graph = find_graph(id, name);
+		if (graph == nullptr)
+			return -1;
+		auto node_x = graph->find(x);
+		if (node_x == graph->end())
+			return -1;
+		auto node_y = node_x->second.find(y);
+		if (node_y == node_x->second.end())
+			return -1;
+		return node_y->second;
+	}
 
-	size_t count = 0;
-	for (auto const &[node, neighbours] : *graph)
-		count += neighbours.size();
+	ssize_t rgc_graph_level(long id, char const *name) {}  // Oliwier
 
-	return static_cast<ssize_t>(count / 2);
-}
+	ssize_t rgc_max_level(void) {
+		return LEVEL_MAX - 1;
+	}
+
+	ssize_t rgc_count_nodes(long id, char const *name) {}  // Oliwier
+
+	ssize_t rgc_count_edges(long id, char const *name) {
+		auto *graph = find_graph(id, name);
+		if (graph == nullptr)
+			return -1;
+
+		size_t count = 0;
+		for (auto const &[node, neighbours] : *graph)
+			count += neighbours.size();
+
+		return static_cast<ssize_t>(count / 2);
+	}
 
 }  // namespace cxx
