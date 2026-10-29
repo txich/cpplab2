@@ -75,6 +75,7 @@ namespace {
 
 		return true;
 	}
+	
 }  // namespace
 
 namespace cxx {
@@ -301,13 +302,41 @@ namespace cxx {
 		return node_y->second;
 	}
 
-	ssize_t rgc_graph_level(long id, char const *name) {}  // Oliwier
+	// Można się zastanowić nad przyspieszeniem tej funkcji tak aby nie sprawdzać każdej krawędzi dwukrotnie.
+	ssize_t rgc_graph_level(long id, char const *name) {
+		auto *graph = find_graph(id, name);
+
+		if (graph != nullptr) {
+			ssize_t max_level = 0;
+
+			for (auto node_it = graph->begin(); node_it != graph->end();
+				++node_it) {
+				for (auto neighbours_it = node_it->second.begin();
+					neighbours_it != node_it->second.end(); ++neighbours_it) {
+					auto current_level = neighbours_it->second;
+					max_level = max(max_level, current_level);
+				}
+			}
+
+			return max_level;
+		}
+
+		return -1;
+	}  // Oliwier
 
 	ssize_t rgc_max_level(void) {
 		return LEVEL_MAX - 1;
 	}
 
-	ssize_t rgc_count_nodes(long id, char const *name) {}  // Oliwier
+	ssize_t rgc_count_nodes(long id, char const *name) {
+		auto *graph = find_graph(id, name);
+
+		if (graph != nullptr) {
+			return static_cast<ssize_t>(graph->size());
+		}
+
+		return -1;
+	}  // Oliwier
 
 	ssize_t rgc_count_edges(long id, char const *name) {
 		auto *graph = find_graph(id, name);
