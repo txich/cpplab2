@@ -8,12 +8,13 @@
 #include <unordered_map>
 #include <utility>
 #include <cstddef>
+#include <utility>
 
 #ifndef LEVEL_MAX
 #define LEVEL_MAX 4
 #endif
 
-static_assert(LEVEL_MAX > 0, "LEVEL_MAX musi byc dodatnie");
+static_assert(LEVEL_MAX > 0, "LEVEL_MAX musi być dodatnie.");
 
 namespace {
 	using Node = int;
@@ -398,9 +399,7 @@ namespace cxx {
 		if (recipient_graph != nullptr && donor_graph != nullptr 
 			&& is_name_correct(result_name)) {
 
-			auto *result_graph = find_graph(id, result_name);
 			auto *w1_neighbours = find_neighbours(id, recipient_name, w_1);
-			auto edge_it = w1_neighbours->find(w_2);
 			auto v1_it = donor_graph->find(v_1);
 			auto v2_it = donor_graph->find(v_2);
 
@@ -409,34 +408,76 @@ namespace cxx {
 			ssize_t nodes_donor =
 				static_cast<ssize_t>(donor_graph->size());
 
-			if (result_graph == nullptr && w1_neighbours != nullptr &&
-				edge_it != w1_neighbours->end() && v1_it != donor_graph->end() &&
-				v2_it != donor_graph->end() && v_1 != v_2 &&
-				nodes_recipient <= INT_MAX - (nodes_donor - 2)) {
+			if (find_graph(id, result_name) == nullptr &&
+				w1_neighbours != nullptr && w1_neighbours->find(w_2) != w1_neighbours->end() &&
+				v1_it != donor_graph->end() && v2_it != donor_graph->end() &&
+				v_1 != v_2 && nodes_recipient <= INT_MAX - (nodes_donor - 2)) {
 
-				ssize_t nodes_result = nodes_recipient + (nodes_donor - 2);
+				auto edge_it = w1_neighbours->find(w_2);
 				ssize_t replaced_edge_level = edge_it->second;
-				ssize_t donor_level =
-					rgc_graph_level(id, donor_name);
-				ssize_t recipient_without_replaced_edge_level =
-					rgc_graph_level_without_edge(id, recipient_name, w_1, w_2);
-				ssize_t result_level = recipient_without_replaced_edge_level;
+				ssize_t donor_level = rgc_graph_level(id, donor_name);
 				ssize_t new_edge_level = 0;
 
 				if (rgc_count_edges(id, donor_name) > 0) {
 					// Warunek na poziom grafu wynikowego.
-					if (max(donor_level, replaced_edge_level) < LEVEL_MAX - 1) {
-						new_edge_level = max(donor_level, replaced_edge_level) + 1;
-						result_level = max(recipient_without_replaced_edge_level,
-										   new_edge_level);
+					if (max(donor_level, replaced_edge_level) <
+						LEVEL_MAX - 1) {
+						new_edge_level =
+							max(donor_level, replaced_edge_level) + 1;
 					}
 					else {
 						return false;
 					}
 				}
 
-				// tutaj zaczynamy tworzenie grafu wynikowego.
-				return true;
+				Graph result_graph = *recipient_graph;
+
+				// Usuwamy krawędź w_1 - w_2 z grafu wynikowego.
+				result_graph.find(w_1)->second.erase(w_2);
+				result_graph.find(w_2)->second.erase(w_1);
+
+				// Mapa przyporządkowuje kazdemu wierzchołkowi grafu
+				// dawcy odpowiadający mu wwirzchołek grafu wynikowego.
+				unordered_map<Node, Node> node_mapping;
+				node_mapping.reserve(donor_graph->size());
+
+				node_mapping.emplace(v_1, w_1);
+				node_mapping.emplace(v_2, w_2);
+
+				Node next_free = 0;
+				auto occupied_it = result_graph.begin();
+				// Pętla wstawiająca nowe wierzchołki do grafu wynikowego
+				// oraz wstawiająca mapowania wierzchołkow do mapy.
+				for (auto const &[donor_node, neighbours] : *donor_graph) {
+					if (donor_node != v_1 && donor_node != v_2) {
+
+						// Szukamy najmniejszego wolnego numeru wierzchołka.
+						while (occupied_it != result_graph.end() &&
+							   occupied_it->first == next_free) {
+							++next_free;
+							++occupied_it;
+						}
+
+						node_mapping.emplace(donor_node, next_free);
+						result_graph.try_emplace(next_free);
+						++next_free;
+					}
+				}
+
+				// Pętla wstawiająca krawędzie do grafu wynikowego.
+				for (auto const &[donor_node, neighbours] : *donor_graph) {
+					Node mapped_node = node_mapping.find(donor_node)->second;
+					
+					for (auto const &[donor_neighbour, level] : neighbours) {
+						Node mapped_neighbour = node_mapping.find(donor_neighbour)->second;
+						result_graph.find(mapped_node)->second.emplace(mapped_neighbour, new_edge_level);
+					}
+				}
+
+				auto *collection = find_collection(id);
+				auto [it, inserted] = collection->emplace(result_name, move(result_graph));
+
+				return inserted;
 			}
 		}
 
