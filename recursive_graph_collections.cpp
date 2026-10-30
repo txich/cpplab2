@@ -23,7 +23,7 @@ namespace {
 	using Collection = std::map<std::string, Graph>;
 	using Collections = std::unordered_map<long, Collection>;
 
-	constexpr Level POCZATKOWY_POZIOM = 0;
+	constexpr Level START_LEVEL = 0;
 
 	Collections &collections() {
 		static Collections data;
@@ -47,6 +47,20 @@ namespace {
 
 		auto it = collection->find(name);
 		return it == collection->end() ? nullptr : &it->second;
+	}
+
+	Neighbours *find_neighbours(long id, char const *name, int node) {
+		auto *graph = find_graph(id, name);
+
+		if (graph != nullptr) {
+			auto it_node = graph->find(node);
+
+			if (it_node != graph->end()) {
+				return &it_node->second;
+			}
+		}
+		
+		return nullptr;
 	}
 
 	bool is_name_correct(char const *name) {
@@ -165,6 +179,7 @@ namespace cxx {
 		return true;
 	}
 
+	// Tutaj mozna wykorzystac funckje pomocnicza find_neighbours.
 	bool rgc_graph_add_edge(long id, char const *name, int x, int y) {
 		auto *graph = find_graph(id, name);
 
@@ -178,8 +193,8 @@ namespace cxx {
 					// nie ma drugiego wśród sąsiadów,
 					// ponieważ graf jest nieskierowany.
 					if (!it_x->second.contains(y)) {
-						it_x->second.try_emplace(y, POCZATKOWY_POZIOM);
-						it_y->second.try_emplace(x, POCZATKOWY_POZIOM);
+						it_x->second.try_emplace(y, START_LEVEL);
+						it_y->second.try_emplace(x, START_LEVEL);
 
 						return true;
 					}
@@ -287,7 +302,23 @@ namespace cxx {
 
 	bool rgc_replace_edge(long id, char const *result_name,
 						char const *recipient_name, int w_1, int w_2,
-						char const *donor_name, int v_1, int v_2) {}	// Oliwier
+						char const *donor_name, int v_1, int v_2) {
+		auto *recipient_graph = find_graph(id, recipient_name);
+		auto *donor_graph = find_graph(id, donor_name);
+			
+		if (is_name_correct(result_name) &&
+			find_graph(id, result_name) == nullptr) {
+			auto *w1_neighbours = find_neighbours(id, recipient_name, w_1);
+			auto v1_it = donor_graph->find(v_1);
+			auto v2_it = donor_graph->find(v_2);
+
+			if (w1_neighbours != nullptr && w1_neighbours->contains(w_2) &&
+				v1_it != donor_graph->end() && v2_it != donor_graph->end()) {
+
+					
+			}
+		}
+	}	// Oliwier
 
 	ssize_t rgc_edge_level(long id, char const *name, int x, int y) {
 		auto *graph = find_graph(id, name);
