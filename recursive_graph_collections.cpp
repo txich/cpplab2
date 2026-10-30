@@ -89,6 +89,35 @@ namespace {
 
 		return true;
 	}
+
+	// Oblicza poziom grafu bez wybranej krawędzi łączącej wierzchołki w_1 i w_2.
+	// mozna poprawic aby w parametrach byly: referencja do konkretnego grafu, w1, w2.
+	ssize_t rgc_graph_level_without_edge(long id, char const *name,
+										int w_1, int w_2) {
+		auto *graph = find_graph(id, name);
+
+		if (graph != nullptr) {
+			ssize_t max_level = 0;
+
+			for (auto node_it = graph->begin(); node_it != graph->end();
+				++node_it) {
+
+				for (auto neighbours_it = node_it->second.begin();
+					neighbours_it != node_it->second.end(); ++neighbours_it) {
+
+					if (!((node_it->first == w_1 && neighbours_it->first == w_2)
+						|| (node_it->first == w_2 && neighbours_it->first == w_1))) {
+						auto current_level = neighbours_it->second;
+						max_level = std::max(max_level, current_level);
+					}
+				}
+			}
+
+			return max_level;
+		}
+
+		return -1;
+	} 
 	
 }  // namespace
 
@@ -300,26 +329,6 @@ namespace cxx {
 		return node_y->first;
 	}
 
-	bool rgc_replace_edge(long id, char const *result_name,
-						char const *recipient_name, int w_1, int w_2,
-						char const *donor_name, int v_1, int v_2) {
-		auto *recipient_graph = find_graph(id, recipient_name);
-		auto *donor_graph = find_graph(id, donor_name);
-			
-		if (is_name_correct(result_name) &&
-			find_graph(id, result_name) == nullptr) {
-			auto *w1_neighbours = find_neighbours(id, recipient_name, w_1);
-			auto v1_it = donor_graph->find(v_1);
-			auto v2_it = donor_graph->find(v_2);
-
-			if (w1_neighbours != nullptr && w1_neighbours->contains(w_2) &&
-				v1_it != donor_graph->end() && v2_it != donor_graph->end()) {
-
-					
-			}
-		}
-	}	// Oliwier
-
 	ssize_t rgc_edge_level(long id, char const *name, int x, int y) {
 		auto *graph = find_graph(id, name);
 		if (graph == nullptr)
@@ -333,7 +342,6 @@ namespace cxx {
 		return node_y->second;
 	}
 
-	// Można się zastanowić nad przyspieszeniem tej funkcji tak aby nie sprawdzać każdej krawędzi dwukrotnie.
 	ssize_t rgc_graph_level(long id, char const *name) {
 		auto *graph = find_graph(id, name);
 
@@ -380,5 +388,59 @@ namespace cxx {
 
 		return static_cast<ssize_t>(count / 2);
 	}
+
+	bool rgc_replace_edge(long id, char const *result_name,
+						char const *recipient_name, int w_1, int w_2,
+						char const *donor_name, int v_1, int v_2) {
+		auto *recipient_graph = find_graph(id, recipient_name);
+		auto *donor_graph = find_graph(id, donor_name);
+			
+		if (recipient_graph != nullptr && donor_graph != nullptr 
+			&& is_name_correct(result_name)) {
+
+			auto *result_graph = find_graph(id, result_name);
+			auto *w1_neighbours = find_neighbours(id, recipient_name, w_1);
+			auto edge_it = w1_neighbours->find(w_2);
+			auto v1_it = donor_graph->find(v_1);
+			auto v2_it = donor_graph->find(v_2);
+
+			ssize_t nodes_recipient = 
+				static_cast<ssize_t>(recipient_graph->size());
+			ssize_t nodes_donor =
+				static_cast<ssize_t>(donor_graph->size());
+
+			if (result_graph == nullptr && w1_neighbours != nullptr &&
+				edge_it != w1_neighbours->end() && v1_it != donor_graph->end() &&
+				v2_it != donor_graph->end() && v_1 != v_2 &&
+				nodes_recipient <= INT_MAX - (nodes_donor - 2)) {
+
+				ssize_t nodes_result = nodes_recipient + (nodes_donor - 2);
+				ssize_t replaced_edge_level = edge_it->second;
+				ssize_t donor_level =
+					rgc_graph_level(id, donor_name);
+				ssize_t recipient_without_replaced_edge_level =
+					rgc_graph_level_without_edge(id, recipient_name, w_1, w_2);
+				ssize_t result_level = recipient_without_replaced_edge_level;
+				ssize_t new_edge_level = 0;
+
+				if (rgc_count_edges(id, donor_name) > 0) {
+					// Warunek na poziom grafu wynikowego.
+					if (max(donor_level, replaced_edge_level) < LEVEL_MAX - 1) {
+						new_edge_level = max(donor_level, replaced_edge_level) + 1;
+						result_level = max(recipient_without_replaced_edge_level,
+										   new_edge_level);
+					}
+					else {
+						return false;
+					}
+				}
+
+				// tutaj zaczynamy tworzenie grafu wynikowego.
+				return true;
+			}
+		}
+
+		return false;
+	}	// Oliwier
 
 }  // namespace cxx
