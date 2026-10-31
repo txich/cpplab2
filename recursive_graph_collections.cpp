@@ -157,6 +157,37 @@ void add_donor_edges(Graph const &donor_graph, Graph &result_graph,
 	}
 }
 
+// Builds the result graph and its numbering data by replacing the selected
+// recipient edge with the donor graph.
+GraphData build_result_graph(GraphData const &recipient_graph_data,
+							 Graph const &donor_graph, Node w_1, Node w_2,
+							 Node v_1, Node v_2, Level new_edge_level) {
+	// Create independent copies of the recipient graph and its numbering data.
+	GraphData result_graph_data = recipient_graph_data;
+	auto &[result_graph, result_graph_numbers] = result_graph_data;
+
+	// Remove the replaced edge in both directions.
+	result_graph.find(w_1)->second.erase(w_2);
+	result_graph.find(w_2)->second.erase(w_1);
+
+	// The map associates each node of the donor graph
+	// with its corresponding node in the result graph.
+	NodeMapping node_mapping;
+	node_mapping.reserve(donor_graph.size());
+
+	node_mapping.emplace(v_1, w_1);
+	node_mapping.emplace(v_2, w_2);
+
+	// Add the remaining donor nodes and build mapping.
+	add_donor_nodes(donor_graph, result_graph, result_graph_numbers,
+					node_mapping);
+
+	// Add donor edges with their new level.
+	add_donor_edges(donor_graph, result_graph, node_mapping, new_edge_level);
+
+	return result_graph_data;
+}
+
 }  // namespace
 
 namespace cxx {
@@ -528,37 +559,13 @@ bool rgc_replace_edge(long id, char const *result_name,
 				}
 			}
 
-			// A separate result preserves both inputs, even if they are the
-			// same graph.
-			Graph result_graph = *recipient_graph;
-			// The result owns an independent copy of the vertex-number
-			// allocator.
-			NodeNumbers result_numbers = recipient_data->second;
-
-			// Remove the edge w_1 - w_2 from the result graph.
-			result_graph.find(w_1)->second.erase(w_2);
-			result_graph.find(w_2)->second.erase(w_1);
-
-			// The map associates each vertex of the donor graph
-			// with its corresponding vertex in the result graph.
-			NodeMapping node_mapping;
-			node_mapping.reserve(donor_graph->size());
-
-			node_mapping.emplace(v_1, w_1);
-			node_mapping.emplace(v_2, w_2);
-
-			// Add the remaining donor nodes and build mapping.
-			add_donor_nodes(*donor_graph, result_graph, result_numbers,
-							node_mapping);
-
-			// Add donor edges with their new level.
-			add_donor_edges(*donor_graph, result_graph, node_mapping,
-							new_edge_level);
+			// Build the result graph after successful validation.
+			GraphData result_data = build_result_graph(*recipient_data,
+				*donor_graph, w_1, w_2, v_1, v_2, new_edge_level);
 
 			// Insert the completed graph into the collection
 			collection->emplace_hint(
-				result_position, result_name,
-				GraphData{std::move(result_graph), std::move(result_numbers)});
+				result_position, result_name, std::move(result_data));
 
 			return true;
 		}
