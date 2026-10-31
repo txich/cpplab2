@@ -296,11 +296,89 @@ void test_levels_and_self_replacement() {
     rgc_delete_collection(id);
 }
 
+void test_edge_statistics() {
+    const long id = rgc_new_collection();
+    const auto check = [id](char const *name, ssize_t count, ssize_t level) {
+        assert(rgc_count_edges(id, name) == count);
+        assert(rgc_graph_level(id, name) == level);
+    };
+    assert(rgc_new_graph(id, "R", 4));
+    for (int x = 0; x < 4; ++x)
+        assert(rgc_graph_add_edge(id, "R", x, (x + 1) % 4));
+    assert(rgc_new_graph(id, "D", 3));
+    assert(rgc_graph_add_edge(id, "D", 0, 1));
+    assert(rgc_graph_add_edge(id, "D", 1, 2));
+    assert(rgc_new_graph(id, "empty", 2));
+    check("R", 4, 0);
+    assert(!rgc_graph_add_edge(id, "R", 1, 0));
+    assert(!rgc_graph_add_edge(id, "R", 0, 0));
+    assert(!rgc_graph_delete_edge(id, "R", 0, 2));
+    check("R", 4, 0);
+
+    // An edgeless donor must only subtract the replaced edge.
+    assert(rgc_replace_edge(id, "less", "R", 0, 1, "empty", 0, 1));
+    check("less", 3, 0);
+    assert(rgc_graph_delete_node(id, "less", 2));
+    check("less", 1, 0);
+    assert(rgc_graph_delete_edge(id, "less", 3, 0));
+    check("less", 0, 0);
+
+    if (LEVEL_MAX > 1) {
+        assert(rgc_replace_edge(id, "L1", "R", 0, 1, "D", 0, 2));
+        check("L1", 5, 1);
+        if (LEVEL_MAX > 2) {
+            assert(rgc_replace_edge(id, "L2", "L1", 0, 4, "D", 0, 2));
+            check("L2", 6, 2);
+            assert(rgc_replace_edge(id, "self", "L1", 0, 4, "L1", 0, 4));
+            check("self", 9, 2);
+            check("L1", 5, 1);
+
+            // Removing one maximum-level edge must retain the maximum;
+            // removing its last occurrence must expose the next lower level.
+            assert(!rgc_graph_add_edge(id, "L2", 5, 0));
+            check("L2", 6, 2);
+            assert(rgc_graph_delete_edge(id, "L2", 5, 0));
+            check("L2", 5, 2);
+            assert(!rgc_graph_delete_edge(id, "L2", 0, 5));
+            check("L2", 5, 2);
+            assert(rgc_graph_delete_edge(id, "L2", 4, 5));
+            check("L2", 4, 1);
+            assert(rgc_graph_delete_node(id, "L2", 4));
+            check("L2", 3, 0);
+            assert(rgc_graph_delete_node(id, "L2", 5)); // Isolated vertex.
+            check("L2", 3, 0);
+            assert(rgc_graph_add_edge(id, "L2", 0, 1));
+            check("L2", 4, 0);
+        }
+
+        // This vertex has incident edges at two different levels.
+        assert(rgc_graph_delete_node(id, "L1", 0));
+        check("L1", 3, 1);
+        assert(rgc_graph_delete_edge(id, "L1", 1, 4));
+        check("L1", 2, 0);
+        assert(rgc_graph_delete_edge(id, "L1", 1, 2));
+        assert(rgc_graph_delete_edge(id, "L1", 2, 3));
+        check("L1", 0, 0);
+        assert(!rgc_graph_delete_edge(id, "L1", 2, 3));
+        check("L1", 0, 0);
+        rgc_delete_graph(id, "L1");
+        assert(rgc_new_graph(id, "L1", 0));
+        check("L1", 0, 0);
+    } else {
+        assert(!rgc_replace_edge(id, "L1", "R", 0, 1, "D", 0, 2));
+        assert(rgc_count_edges(id, "L1") == -1);
+    }
+    check("R", 4, 0);
+    check("D", 2, 0);
+    rgc_delete_collection(id);
+}
+
 int main() {
     test_collections_and_names();
     test_nodes_and_edges();
     test_replacement();
     test_vertex_number_allocator();
     test_levels_and_self_replacement();
+    test_edge_statistics();
     std::cout << "PASS: deterministic API tests, LEVEL_MAX=" << LEVEL_MAX << '\n';
 }

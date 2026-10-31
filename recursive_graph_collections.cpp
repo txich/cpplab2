@@ -8,6 +8,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <utility>
 
@@ -30,9 +31,11 @@ using NodeNumbers = std::pair<Node, std::set<Node>>;
 // The map associates each vertex of the donor graph
 // with its corresponding vertex in the resulting graph.
 using NodeMapping = std::unordered_map<Node, Node>;
-// The first element stores the graph, and the second stores its numbering
-// data.
-using GraphData = std::pair<Graph, NodeNumbers>;
+// Only levels with a positive number of undirected edges are stored.
+using LevelCounts = std::map<Level, std::size_t>;
+// Total edge count and counts by level; each undirected edge is counted once.
+using EdgeStats = std::pair<std::size_t, LevelCounts>;
+using GraphData = std::tuple<Graph, NodeNumbers, EdgeStats>;
 // The transparent comparator std::less<> compares stored strings directly with
 // const char* lookup keys, avoiding temporary strings while preserving lexical
 // order.
@@ -47,7 +50,7 @@ Collections &collections() {
 	return data;
 }
 
-// GCC/Clang reserve priorities 0--100 for the runtime. Initialize before
+// GCC reserve priorities 0--100 for the runtime. Initialize before
 // ordinary global objects so the state outlives their destructors.
 constexpr int INITIALIZATION_PRIORITY = 101;
 
@@ -71,7 +74,32 @@ GraphData *find_graph_data(Collection *collection, char const *name) {
 
 Graph *find_graph(long id, char const *name) {
 	auto *data = find_graph_data(find_collection(id), name);
-	return data == nullptr ? nullptr : &data->first;
+	return data == nullptr ? nullptr : &std::get<Graph>(*data);
+}
+
+void add_edge_counts(EdgeStats &stats, Level level, std::size_t count = 1) {
+	if (count == 0) {
+		return;
+	}
+	auto &[total, counts] = stats;
+	auto entry = counts.try_emplace(level, 0).first;
+	entry->second += count;
+	total += count;
+}
+
+// Called only when an edge of this level is present.
+void remove_edge_count(EdgeStats &stats, Level level) {
+	auto &[total, counts] = stats;
+	auto entry = counts.find(level);
+	if (--entry->second == 0) {
+		counts.erase(entry);
+	}
+	--total;
+}
+
+Level max_edge_level(EdgeStats const &stats) {
+	auto const &counts = stats.second;
+	return counts.empty() ? START_LEVEL : counts.rbegin()->first;
 }
 
 Neighbours *find_neighbours(Graph *graph, int node) {
@@ -115,7 +143,8 @@ bool is_name_correct(char const *name) {
 
 // Adds donor nodes to the result graph and builds their mapping.
 void add_donor_nodes(Graph const &donor_graph, Graph &result_graph,
-					 NodeNumbers &numbers, NodeMapping &node_mapping) {
+					 NodeNumbers &numbers, NodeMapping &node_mapping, Node v_1,
+					 Node v_2) {
 	auto &[next_after_max, free_nodes] = numbers;
 
 	Node next_free = 0;
@@ -125,7 +154,7 @@ void add_donor_nodes(Graph const &donor_graph, Graph &result_graph,
 		Node donor_node = donor_vertex.first;
 
 		// The two selected donor vertices already have mappings.
-		if (!node_mapping.contains(donor_node)) {
+		if (donor_node != v_1 && donor_node != v_2) {
 			// Find the smallest unused vertex number.
 			while (occupied_it != result_graph.end() &&
 				   occupied_it->first == next_free) {
@@ -162,17 +191,22 @@ void add_donor_edges(Graph const &donor_graph, Graph &result_graph,
 	}
 }
 
-// Builds the result graph and its numbering data by replacing the selected
-// recipient edge with the donor graph.
+// Copies the recipient, including numbering and edge statistics, then replaces
+// the selected edge with the donor graph.
 GraphData build_result_graph(GraphData const &recipient_graph_data,
-							 Graph const &donor_graph, Node w_1, Node w_2,
-							 Node v_1, Node v_2, Level new_edge_level) {
-	// Create independent copies of the recipient graph and its numbering data.
+							 GraphData const &donor_graph_data, Node w_1,
+							 Node w_2, Node v_1, Node v_2,
+							 Level new_edge_level) {
 	GraphData result_graph_data = recipient_graph_data;
-	auto &[result_graph, result_graph_numbers] = result_graph_data;
+	auto &[result_graph, result_graph_numbers, result_stats] =
+		result_graph_data;
+	auto const &donor_graph = std::get<Graph>(donor_graph_data);
 
-	// Remove the replaced edge in both directions.
-	result_graph.find(w_1)->second.erase(w_2);
+	// Remove both adjacency entries, but count the removed edge only once.
+	auto &w1_neighbours = result_graph.find(w_1)->second;
+	auto replaced_edge = w1_neighbours.find(w_2);
+	remove_edge_count(result_stats, replaced_edge->second);
+	w1_neighbours.erase(replaced_edge);
 	result_graph.find(w_2)->second.erase(w_1);
 
 	// The map associates each node of the donor graph
@@ -185,10 +219,12 @@ GraphData build_result_graph(GraphData const &recipient_graph_data,
 
 	// Add the remaining donor nodes and build mapping.
 	add_donor_nodes(donor_graph, result_graph, result_graph_numbers,
-					node_mapping);
+					node_mapping, v_1, v_2);
 
 	// Add donor edges with their new level.
 	add_donor_edges(donor_graph, result_graph, node_mapping, new_edge_level);
+	add_edge_counts(result_stats, new_edge_level,
+					std::get<EdgeStats>(donor_graph_data).first);
 
 	return result_graph_data;
 }
@@ -228,7 +264,7 @@ bool rgc_new_graph(long id, char const *name, int n) {
 	if (collection != nullptr && is_name_correct(name) && n >= 0) {
 		auto [it, inserted] = collection->try_emplace(name);
 		if (inserted) {
-			auto &[graph, numbering] = it->second;
+			auto &[graph, numbering, stats] = it->second;
 			auto &[next_unused, free_nodes] = numbering;
 			next_unused = n;
 
@@ -262,7 +298,7 @@ int rgc_graph_new_node(long id, char const *name) {
 	if (data == nullptr) {
 		return -1;
 	}
-	auto &[graph, numbering] = *data;
+	auto &[graph, numbering, stats] = *data;
 
 	if (graph.size() < static_cast<size_t>(INT_MAX)) {
 		auto &[next_unused, free_nodes] = numbering;
@@ -288,7 +324,7 @@ bool rgc_graph_delete_node(long id, char const *name, int x) {
 	if (data == nullptr) {
 		return false;
 	}
-	auto &[graph, numbering] = *data;
+	auto &[graph, numbering, stats] = *data;
 	auto node = graph.find(x);
 	if (node == graph.end()) {
 		return false;
@@ -296,6 +332,7 @@ bool rgc_graph_delete_node(long id, char const *name, int x) {
 	// Remove reverse entries before destroying this vertex's neighbour map.
 	for (auto const &[neighbour, level] : node->second) {
 		graph.at(neighbour).erase(x);
+		remove_edge_count(stats, level);
 	}
 	graph.erase(node);
 	auto &[next_unused, free_nodes] = numbering;
@@ -310,19 +347,21 @@ bool rgc_graph_delete_node(long id, char const *name, int x) {
 }
 
 bool rgc_graph_add_edge(long id, char const *name, int x, int y) {
-	auto *graph = find_graph(id, name);
+	auto *data = find_graph_data(find_collection(id), name);
 
-	if (graph != nullptr) {
-		auto it_x = graph->find(x);
-		if (it_x != graph->end()) {
-			auto it_y = graph->find(y);
-			if (it_y != graph->end() && it_x != it_y) {
+	if (data != nullptr) {
+		auto &[graph, numbering, stats] = *data;
+		auto it_x = graph.find(x);
+		if (it_x != graph.end()) {
+			auto it_y = graph.find(y);
+			if (it_y != graph.end() && it_x != it_y) {
 				// Checking one endpoint is sufficient because adjacency is
 				// symmetric.
 				auto [edge, inserted] =
 					it_x->second.try_emplace(y, START_LEVEL);
 				if (inserted) {
 					it_y->second.try_emplace(x, START_LEVEL);
+					add_edge_counts(stats, START_LEVEL);
 
 					return true;
 				}
@@ -334,18 +373,22 @@ bool rgc_graph_add_edge(long id, char const *name, int x, int y) {
 }
 
 bool rgc_graph_delete_edge(long id, char const *name, int x, int y) {
-	auto *graph = find_graph(id, name);
-	if (graph == nullptr) {
+	auto *data = find_graph_data(find_collection(id), name);
+	if (data == nullptr) {
 		return false;
 	}
-	auto node_x = graph->find(x);
-	auto node_y = graph->find(y);
-	if (node_x == graph->end() || node_y == graph->end()) {
+	auto &[graph, numbering, stats] = *data;
+	auto node_x = graph.find(x);
+	auto node_y = graph.find(y);
+	if (node_x == graph.end() || node_y == graph.end()) {
 		return false;
 	}
-	if (node_x->second.erase(y) == 0) {
+	auto edge = node_x->second.find(y);
+	if (edge == node_x->second.end()) {
 		return false;
 	}
+	remove_edge_count(stats, edge->second);
+	node_x->second.erase(edge);
 	node_y->second.erase(x);
 	return true;
 }
@@ -454,24 +497,8 @@ ssize_t rgc_edge_level(long id, char const *name, int x, int y) {
 }
 
 ssize_t rgc_graph_level(long id, char const *name) {
-	auto *graph = find_graph(id, name);
-
-	if (graph != nullptr) {
-		ssize_t max_level = 0;
-
-		for (auto node_it = graph->begin(); node_it != graph->end();
-			 ++node_it) {
-			for (auto neighbours_it = node_it->second.begin();
-				 neighbours_it != node_it->second.end(); ++neighbours_it) {
-				auto current_level = neighbours_it->second;
-				max_level = max(max_level, current_level);
-			}
-		}
-
-		return max_level;
-	}
-
-	return -1;
+	auto const *data = find_graph_data(find_collection(id), name);
+	return data == nullptr ? -1 : max_edge_level(std::get<EdgeStats>(*data));
 }
 
 ssize_t rgc_max_level(void) {
@@ -489,18 +516,11 @@ ssize_t rgc_count_nodes(long id, char const *name) {
 }
 
 ssize_t rgc_count_edges(long id, char const *name) {
-	auto *graph = find_graph(id, name);
-	if (graph == nullptr) {
+	auto const *data = find_graph_data(find_collection(id), name);
+	if (data == nullptr) {
 		return -1;
 	}
-
-	size_t count = 0;
-	for (auto const &[node, neighbours] : *graph) {
-		count += neighbours.size();
-	}
-
-	// Each undirected edge contributes twice to the sum of vertex degrees.
-	return static_cast<ssize_t>(count / 2);
+	return static_cast<ssize_t>(std::get<EdgeStats>(*data).first);
 }
 
 bool rgc_replace_edge(long id, char const *result_name,
@@ -510,8 +530,9 @@ bool rgc_replace_edge(long id, char const *result_name,
 	auto *recipient_data = find_graph_data(collection, recipient_name);
 	auto *donor_data = find_graph_data(collection, donor_name);
 	auto *recipient_graph =
-		recipient_data == nullptr ? nullptr : &recipient_data->first;
-	auto *donor_graph = donor_data == nullptr ? nullptr : &donor_data->first;
+		recipient_data == nullptr ? nullptr : &std::get<Graph>(*recipient_data);
+	auto *donor_graph =
+		donor_data == nullptr ? nullptr : &std::get<Graph>(*donor_data);
 
 	if (recipient_graph != nullptr && donor_graph != nullptr &&
 		is_name_correct(result_name)) {
@@ -539,20 +560,13 @@ bool rgc_replace_edge(long id, char const *result_name,
 			v2_it != donor_graph->end() && v_1 != v_2 &&
 			nodes_recipient <= INT_MAX - (nodes_donor - 2)) {
 			ssize_t replaced_edge_level = edge_it->second;
-			ssize_t donor_level = 0;
-			bool donor_has_edges = false;
-			// Determine the donor's level and edge presence in one traversal.
-			for (auto const &[node, neighbours] : *donor_graph) {
-				donor_has_edges = donor_has_edges || !neighbours.empty();
-				for (auto const &[neighbour, level] : neighbours) {
-					donor_level = max(donor_level, level);
-				}
-			}
+			auto const &donor_stats = std::get<EdgeStats>(*donor_data);
+			ssize_t donor_level = max_edge_level(donor_stats);
 			ssize_t new_edge_level = 0;
 
 			// An edgeless donor adds no levels and can replace a maximum-level
 			// edge.
-			if (donor_has_edges) {
+			if (donor_stats.first != 0) {
 				// Check the level constraint for the resulting graph.
 				if (max(donor_level, replaced_edge_level) < LEVEL_MAX - 1) {
 					new_edge_level = max(donor_level, replaced_edge_level) + 1;
@@ -563,7 +577,7 @@ bool rgc_replace_edge(long id, char const *result_name,
 
 			// Build the result graph after successful validation.
 			GraphData result_data =
-				build_result_graph(*recipient_data, *donor_graph, w_1, w_2, v_1,
+				build_result_graph(*recipient_data, *donor_data, w_1, w_2, v_1,
 								   v_2, new_edge_level);
 
 			// Insert the completed graph into the collection
