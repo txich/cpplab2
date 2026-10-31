@@ -47,6 +47,14 @@ Collections &collections() {
 	return data;
 }
 
+// GCC/Clang reserve priorities 0--100 for the runtime. Initialize before
+// ordinary global objects so the state outlives their destructors.
+constexpr int INITIALIZATION_PRIORITY = 101;
+
+[[gnu::constructor(INITIALIZATION_PRIORITY)]] void initialize_collections() {
+	(void)collections();
+}
+
 Collection *find_collection(long id) {
 	auto &all = collections();
 	auto it = all.find(id);
@@ -88,8 +96,7 @@ bool is_name_correct(char const *name) {
 		while (character != '\0') {
 			if (!((character >= 'a' && character <= 'z') ||
 				  (character >= 'A' && character <= 'Z') ||
-				  (character >= '0' && character <= '9') ||
-				  character == '_')) {
+				  (character >= '0' && character <= '9') || character == '_')) {
 				return false;
 			}
 			++i;
@@ -119,7 +126,6 @@ void add_donor_nodes(Graph const &donor_graph, Graph &result_graph,
 
 		// The two selected donor vertices already have mappings.
 		if (!node_mapping.contains(donor_node)) {
-
 			// Find the smallest unused vertex number.
 			while (occupied_it != result_graph.end() &&
 				   occupied_it->first == next_free) {
@@ -133,8 +139,7 @@ void add_donor_nodes(Graph const &donor_graph, Graph &result_graph,
 			// Update the vertex numbering data.
 			if (next_free < next_after_max) {
 				free_nodes.erase(next_free);
-			}
-			else {
+			} else {
 				next_after_max = next_free + 1;
 			}
 
@@ -149,7 +154,7 @@ void add_donor_edges(Graph const &donor_graph, Graph &result_graph,
 	for (auto const &[donor_node, neighbours] : donor_graph) {
 		auto &mapped_neighbours =
 			result_graph.find(node_mapping.at(donor_node))->second;
-		
+
 		for (auto const &edge : neighbours) {
 			Node mapped_neighbour = node_mapping.at(edge.first);
 			mapped_neighbours.try_emplace(mapped_neighbour, new_level);
@@ -297,8 +302,7 @@ bool rgc_graph_delete_node(long id, char const *name, int x) {
 	if (x == next_unused - 1) {
 		// Numbers beyond the last vertex no longer need separate free entries.
 		next_unused = graph.empty() ? 0 : graph.rbegin()->first + 1;
-		free_nodes.erase(free_nodes.lower_bound(next_unused),
-						 free_nodes.end());
+		free_nodes.erase(free_nodes.lower_bound(next_unused), free_nodes.end());
 	} else {
 		free_nodes.insert(x);
 	}
@@ -525,8 +529,7 @@ bool rgc_replace_edge(long id, char const *result_name,
 		auto v1_it = donor_graph->find(v_1);
 		auto v2_it = donor_graph->find(v_2);
 
-		ssize_t nodes_recipient =
-			static_cast<ssize_t>(recipient_graph->size());
+		ssize_t nodes_recipient = static_cast<ssize_t>(recipient_graph->size());
 		ssize_t nodes_donor = static_cast<ssize_t>(donor_graph->size());
 
 		// The two selected donor vertices merge with existing recipient
@@ -535,7 +538,6 @@ bool rgc_replace_edge(long id, char const *result_name,
 		if (edge_it != w1_neighbours->end() && v1_it != donor_graph->end() &&
 			v2_it != donor_graph->end() && v_1 != v_2 &&
 			nodes_recipient <= INT_MAX - (nodes_donor - 2)) {
-
 			ssize_t replaced_edge_level = edge_it->second;
 			ssize_t donor_level = 0;
 			bool donor_has_edges = false;
@@ -560,12 +562,13 @@ bool rgc_replace_edge(long id, char const *result_name,
 			}
 
 			// Build the result graph after successful validation.
-			GraphData result_data = build_result_graph(*recipient_data,
-				*donor_graph, w_1, w_2, v_1, v_2, new_edge_level);
+			GraphData result_data =
+				build_result_graph(*recipient_data, *donor_graph, w_1, w_2, v_1,
+								   v_2, new_edge_level);
 
 			// Insert the completed graph into the collection
-			collection->emplace_hint(
-				result_position, result_name, std::move(result_data));
+			collection->emplace_hint(result_position, result_name,
+									 std::move(result_data));
 
 			return true;
 		}
