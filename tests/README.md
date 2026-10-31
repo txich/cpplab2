@@ -23,6 +23,7 @@ Coverage includes:
 - Collection isolation, identifier progression, and initialization before `main`.
 - Ordered iteration, numbering gaps, duplicate edges, loops, and symmetric deletion.
 - Counts and levels after mutations, including empty graphs and isolated vertices.
+- Vertex-number allocator independence after replacement and graph deletion.
 - Edge replacement, endpoint orientation, smallest available vertex numbers,
   self-replacement, edgeless donors, level limits, and unchanged input graphs.
 - Reproducible randomized operations compared with an independent model storing
@@ -31,8 +32,8 @@ Coverage includes:
 - Compile-time rejection of `LEVEL_MAX=0`.
 
 The tests do not allocate `INT_MAX` vertices or exhaust all `long` identifiers.
-They also do not decide the ambiguous `rgc_next_graph` behavior when a non-null
-name is absent from a nonempty collection; iteration tests use existing names.
+Iteration tests also check that `rgc_next_graph` returns the smallest name
+greater than the query when that query is absent, as clarified on the forum.
 Compiler warnings remain visible and do not fail the run automatically.
 
 ## Large graphs
@@ -55,5 +56,6 @@ vertices, reuse of vertex numbers, and preservation of input graphs.
 Each scenario prints elapsed time including graph creation, assertions, and
 cleanup. These measurements have no pass/fail threshold: they depend on the
 machine and do not predict the grading server's time limits. Large graphs are
-created with `rgc_new_graph`; this suite does not benchmark building all vertices
-one by one through `rgc_graph_new_node`.
+created with `rgc_new_graph`. An additional scenario creates `--edges` vertices
+one by one through `rgc_graph_new_node`, deletes every other vertex, and checks
+that their numbers are reused in ascending order.

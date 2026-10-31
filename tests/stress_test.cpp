@@ -202,12 +202,27 @@ void test_large_replacement(int edges) {
     rgc_delete_collection(id);
 }
 
+void test_incremental_vertices(int nodes) {
+    const long id = rgc_new_collection();
+    assert(rgc_new_graph(id, "incremental", 0));
+    for (int node = 0; node < nodes; ++node)
+        assert(rgc_graph_new_node(id, "incremental") == node);
+    for (int node = 0; node < nodes; node += 2)
+        assert(rgc_graph_delete_node(id, "incremental", node));
+    for (int node = 0; node < nodes; node += 2)
+        assert(rgc_graph_new_node(id, "incremental") == node);
+    assert(rgc_graph_new_node(id, "incremental") == nodes);
+    assert(rgc_count_nodes(id, "incremental") == nodes + 1);
+    assert(rgc_count_edges(id, "incremental") == 0);
+    rgc_delete_collection(id);
+}
+
 void run_case(char const *name, void (*test)(int), int edges) {
     const auto start = std::chrono::steady_clock::now();
     test(edges);
     const auto seconds = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - start).count();
-    std::cout << "PASS: " << name << ", E=" << edges
+    std::cout << "PASS: " << name << ", size=" << edges
               << ", " << std::fixed << std::setprecision(3) << seconds
               << " s (including assertions)" << std::endl;
 }
@@ -216,6 +231,7 @@ int main(int argc, char **argv) {
     const int edges = argc == 2 ? std::stoi(argv[1]) : 100000;
     assert(edges >= 2 && edges <= (INT_MAX - 2) / 2);
     assert(rgc_max_level() == LEVEL_MAX - 1);
+    run_case("incremental vertices and number reuse", test_incremental_vertices, edges);
     run_case("star: high-degree deletion and edge updates", test_star, edges);
     run_case("path: gaps and ordered iteration", test_sparse_path, edges);
     run_case("dense bipartite graph", test_dense_bipartite, edges);

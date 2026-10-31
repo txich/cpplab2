@@ -111,6 +111,13 @@ void test_collections_and_names() {
         assert(names.size() <= expected.size());
     }
     assert(names == expected);
+    // Absent names still select the first lexicographically greater name.
+    for (auto [query, successor] : {std::pair{"", "0"}, {"00", "A"},
+                                   {"B", "Owned"}, {"aa", "z"}}) {
+        const char *actual = rgc_next_graph(id, query);
+        assert(actual && std::strcmp(actual, successor) == 0);
+    }
+    assert(rgc_next_graph(id, "zz") == nullptr);
     assert(rgc_next_graph(id, nullptr) == nullptr);
     assert(rgc_size(next_id) == 0); // Collections are independent.
     rgc_delete_collection(id);
@@ -218,6 +225,40 @@ void test_replacement() {
     rgc_delete_collection(id);
 }
 
+void test_vertex_number_allocator() {
+    const long id = rgc_new_collection();
+    assert(rgc_new_graph(id, "R", 8));
+    assert(rgc_graph_add_edge(id, "R", 0, 2));
+    for (int node : {7, 4, 1})
+        assert(rgc_graph_delete_node(id, "R", node));
+    assert(!rgc_graph_delete_node(id, "R", 1));
+    assert(rgc_new_graph(id, "D", 4));
+
+    // The result fills two gaps and must preserve the remaining free number.
+    assert(rgc_replace_edge(id, "result", "R", 0, 2, "D", 0, 1));
+    assert(rgc_graph_new_node(id, "result") == 7);
+    assert(rgc_graph_new_node(id, "result") == 8);
+    for (int expected : {1, 4, 7, 8})
+        assert(rgc_graph_new_node(id, "R") == expected);
+
+    // Repeated deletion and reuse must not leave stale allocator entries.
+    for (int i = 0; i < 100; ++i) {
+        assert(rgc_graph_delete_node(id, "R", 0));
+        assert(rgc_graph_new_node(id, "R") == 0);
+    }
+    rgc_delete_graph(id, "result");
+    assert(rgc_new_graph(id, "result", 0));
+    assert(rgc_graph_new_node(id, "result") == 0);
+    assert(rgc_graph_new_node(id, "result") == 1);
+
+    const long other = rgc_new_collection();
+    assert(rgc_new_graph(other, "R", 0));
+    assert(rgc_graph_new_node(other, "R") == 0);
+    rgc_delete_collection(id);
+    assert(rgc_graph_new_node(other, "R") == 1);
+    rgc_delete_collection(other);
+}
+
 void test_levels_and_self_replacement() {
     const long id = rgc_new_collection();
     assert(rgc_max_level() == LEVEL_MAX - 1);
@@ -259,6 +300,7 @@ int main() {
     test_collections_and_names();
     test_nodes_and_edges();
     test_replacement();
+    test_vertex_number_allocator();
     test_levels_and_self_replacement();
     std::cout << "PASS: deterministic API tests, LEVEL_MAX=" << LEVEL_MAX << '\n';
 }
