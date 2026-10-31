@@ -27,7 +27,11 @@ using Graph = std::map<Node, Neighbours>;
 // The first element is one past the largest vertex number, or zero if empty.
 // The second element stores all free numbers below that boundary.
 using NodeNumbers = std::pair<Node, std::set<Node>>;
-// The first element stores the graph, and the second stores its numbering data.
+// The map associates each vertex of the donor graph
+// with its corresponding vertex in the resulting graph.
+using NodeMapping = std::unordered_map<Node, Node>;
+// The first element stores the graph, and the second stores its numbering
+// data.
 using GraphData = std::pair<Graph, NodeNumbers>;
 // The transparent comparator std::less<> compares stored strings directly with
 // const char* lookup keys, avoiding temporary strings while preserving lexical
@@ -50,9 +54,9 @@ Collection *find_collection(long id) {
 }
 
 GraphData *find_graph_data(Collection *collection, char const *name) {
-	if (collection == nullptr || name == nullptr)
+	if (collection == nullptr || name == nullptr) {
 		return nullptr;
-
+	}
 	auto it = collection->find(name);
 	return it == collection->end() ? nullptr : &it->second;
 }
@@ -84,7 +88,8 @@ bool is_name_correct(char const *name) {
 		while (character != '\0') {
 			if (!((character >= 'a' && character <= 'z') ||
 				  (character >= 'A' && character <= 'Z') ||
-				  (character >= '0' && character <= '9') || character == '_')) {
+				  (character >= '0' && character <= '9') ||
+				  character == '_')) {
 				return false;
 			}
 			++i;
@@ -101,6 +106,57 @@ bool is_name_correct(char const *name) {
 	return true;
 }
 
+// Adds donor nodes to the result graph and builds their mapping.
+void add_donor_nodes(Graph const &donor_graph, Graph &result_graph,
+					 NodeNumbers &numbers, NodeMapping &node_mapping) {
+	auto &[next_after_max, free_nodes] = numbers;
+
+	Node next_free = 0;
+	auto occupied_it = result_graph.begin();
+
+	for (auto const &donor_vertex : donor_graph) {
+		Node donor_node = donor_vertex.first;
+
+		// The two selected donor vertices already have mappings.
+		if (!node_mapping.contains(donor_node)) {
+
+			// Find the smallest unused vertex number.
+			while (occupied_it != result_graph.end() &&
+				   occupied_it->first == next_free) {
+				++occupied_it;
+				++next_free;
+			}
+
+			node_mapping.emplace(donor_node, next_free);
+			result_graph.try_emplace(occupied_it, next_free);
+
+			// Update the vertex numbering data.
+			if (next_free < next_after_max) {
+				free_nodes.erase(next_free);
+			}
+			else {
+				next_after_max = next_free + 1;
+			}
+
+			++next_free;
+		}
+	}
+}
+
+// Adds donor edges to the result graph using the vertex mapping.
+void add_donor_edges(Graph const &donor_graph, Graph &result_graph,
+					 NodeMapping const &node_mapping, Level new_level) {
+	for (auto const &[donor_node, neighbours] : donor_graph) {
+		auto &mapped_neighbours =
+			result_graph.find(node_mapping.at(donor_node))->second;
+		
+		for (auto const &edge : neighbours) {
+			Node mapped_neighbour = node_mapping.at(edge.first);
+			mapped_neighbours.try_emplace(mapped_neighbour, new_level);
+		}
+	}
+}
+
 }  // namespace
 
 namespace cxx {
@@ -108,9 +164,9 @@ using namespace std;
 
 long rgc_new_collection(void) {
 	static long next_id = 0;
-	if (next_id == -1)
+	if (next_id == -1) {
 		return -1;
-
+	}
 	const long id = next_id;
 	collections().try_emplace(id);
 	// The -1 sentinel marks exhaustion without incrementing LONG_MAX.
@@ -124,9 +180,9 @@ void rgc_delete_collection(long id) {
 
 ssize_t rgc_size(long id) {
 	auto *collection = find_collection(id);
-	if (collection == nullptr)
+	if (collection == nullptr) {
 		return -1;
-
+	}
 	return static_cast<ssize_t>(collection->size());
 }
 
@@ -152,21 +208,24 @@ bool rgc_new_graph(long id, char const *name, int n) {
 }
 
 void rgc_delete_graph(long id, char const *name) {
-	if (name == nullptr)
+	if (name == nullptr) {
 		return;
-
+	}
 	auto *collection = find_collection(id);
-	if (collection == nullptr)
+	if (collection == nullptr) {
 		return;
+	}
 	auto it = collection->find(name);
-	if (it != collection->end())
+	if (it != collection->end()) {
 		collection->erase(it);
+	}
 }
 
 int rgc_graph_new_node(long id, char const *name) {
 	auto *data = find_graph_data(find_collection(id), name);
-	if (data == nullptr)
+	if (data == nullptr) {
 		return -1;
+	}
 	auto &[graph, numbering] = *data;
 
 	if (graph.size() < static_cast<size_t>(INT_MAX)) {
@@ -190,21 +249,25 @@ int rgc_graph_new_node(long id, char const *name) {
 
 bool rgc_graph_delete_node(long id, char const *name, int x) {
 	auto *data = find_graph_data(find_collection(id), name);
-	if (data == nullptr)
+	if (data == nullptr) {
 		return false;
+	}
 	auto &[graph, numbering] = *data;
 	auto node = graph.find(x);
-	if (node == graph.end())
+	if (node == graph.end()) {
 		return false;
+	}
 	// Remove reverse entries before destroying this vertex's neighbour map.
-	for (auto const &[neighbour, level] : node->second)
+	for (auto const &[neighbour, level] : node->second) {
 		graph.at(neighbour).erase(x);
+	}
 	graph.erase(node);
 	auto &[next_unused, free_nodes] = numbering;
 	if (x == next_unused - 1) {
 		// Numbers beyond the last vertex no longer need separate free entries.
 		next_unused = graph.empty() ? 0 : graph.rbegin()->first + 1;
-		free_nodes.erase(free_nodes.lower_bound(next_unused), free_nodes.end());
+		free_nodes.erase(free_nodes.lower_bound(next_unused),
+						 free_nodes.end());
 	} else {
 		free_nodes.insert(x);
 	}
@@ -237,15 +300,17 @@ bool rgc_graph_add_edge(long id, char const *name, int x, int y) {
 
 bool rgc_graph_delete_edge(long id, char const *name, int x, int y) {
 	auto *graph = find_graph(id, name);
-	if (graph == nullptr)
+	if (graph == nullptr) {
 		return false;
+	}
 	auto node_x = graph->find(x);
 	auto node_y = graph->find(y);
-	if (node_x == graph->end() || node_y == graph->end())
+	if (node_x == graph->end() || node_y == graph->end()) {
 		return false;
-
-	if (node_x->second.erase(y) == 0)
+	}
+	if (node_x->second.erase(y) == 0) {
 		return false;
+	}
 	node_y->second.erase(x);
 	return true;
 }
@@ -261,17 +326,20 @@ char const *rgc_first_graph(long id) {
 }
 
 char const *rgc_next_graph(long id, char const *name) {
-	if (name == nullptr)
+	if (name == nullptr) {
 		return nullptr;
+	}
 
 	auto *collection = find_collection(id);
-	if (collection == nullptr)
+	if (collection == nullptr) {
 		return nullptr;
+	}
 
 	// The threshold name need not belong to an existing graph.
 	auto iter = collection->upper_bound(name);
-	if (iter == collection->end())
+	if (iter == collection->end()) {
 		return nullptr;
+	}
 
 	return iter->first.c_str();
 }
@@ -288,13 +356,15 @@ int rgc_first_node(long id, char const *name) {
 
 int rgc_next_node(long id, char const *name, int x) {
 	auto *graph = find_graph(id, name);
-	if (graph == nullptr)
+	if (graph == nullptr) {
 		return -1;
+	}
 
 	// The threshold x need not be an existing vertex number.
 	auto iter = graph->upper_bound(x);
-	if (iter == graph->end())
+	if (iter == graph->end()) {
 		return -1;
+	}
 
 	return iter->first;
 }
@@ -314,31 +384,37 @@ int rgc_first_edge(long id, char const *name, int x) {
 
 int rgc_next_edge(long id, char const *name, int x, int y) {
 	auto *graph = find_graph(id, name);
-	if (graph == nullptr)
+	if (graph == nullptr) {
 		return -1;
+	}
 
 	auto iter = graph->find(x);
-	if (iter == graph->end())
+	if (iter == graph->end()) {
 		return -1;
+	}
 
 	// The threshold y need not be an existing neighbour.
 	auto node_y = iter->second.upper_bound(y);
-	if (node_y == iter->second.end())
+	if (node_y == iter->second.end()) {
 		return -1;
+	}
 
 	return node_y->first;
 }
 
 ssize_t rgc_edge_level(long id, char const *name, int x, int y) {
 	auto *graph = find_graph(id, name);
-	if (graph == nullptr)
+	if (graph == nullptr) {
 		return -1;
+	}
 	auto node_x = graph->find(x);
-	if (node_x == graph->end())
+	if (node_x == graph->end()) {
 		return -1;
+	}
 	auto node_y = node_x->second.find(y);
-	if (node_y == node_x->second.end())
+	if (node_y == node_x->second.end()) {
 		return -1;
+	}
 	return node_y->second;
 }
 
@@ -379,12 +455,14 @@ ssize_t rgc_count_nodes(long id, char const *name) {
 
 ssize_t rgc_count_edges(long id, char const *name) {
 	auto *graph = find_graph(id, name);
-	if (graph == nullptr)
+	if (graph == nullptr) {
 		return -1;
+	}
 
 	size_t count = 0;
-	for (auto const &[node, neighbours] : *graph)
+	for (auto const &[node, neighbours] : *graph) {
 		count += neighbours.size();
+	}
 
 	// Each undirected edge contributes twice to the sum of vertex degrees.
 	return static_cast<ssize_t>(count / 2);
@@ -404,17 +482,20 @@ bool rgc_replace_edge(long id, char const *result_name,
 		is_name_correct(result_name)) {
 		auto result_position = collection->lower_bound(result_name);
 		if (result_position != collection->end() &&
-			result_position->first == result_name)
+			result_position->first == result_name) {
 			return false;
+		}
 
 		auto *w1_neighbours = find_neighbours(recipient_graph, w_1);
-		if (w1_neighbours == nullptr)
+		if (w1_neighbours == nullptr) {
 			return false;
+		}
 		auto edge_it = w1_neighbours->find(w_2);
 		auto v1_it = donor_graph->find(v_1);
 		auto v2_it = donor_graph->find(v_2);
 
-		ssize_t nodes_recipient = static_cast<ssize_t>(recipient_graph->size());
+		ssize_t nodes_recipient =
+			static_cast<ssize_t>(recipient_graph->size());
 		ssize_t nodes_donor = static_cast<ssize_t>(donor_graph->size());
 
 		// The two selected donor vertices merge with existing recipient
@@ -423,14 +504,16 @@ bool rgc_replace_edge(long id, char const *result_name,
 		if (edge_it != w1_neighbours->end() && v1_it != donor_graph->end() &&
 			v2_it != donor_graph->end() && v_1 != v_2 &&
 			nodes_recipient <= INT_MAX - (nodes_donor - 2)) {
+
 			ssize_t replaced_edge_level = edge_it->second;
 			ssize_t donor_level = 0;
 			bool donor_has_edges = false;
 			// Determine the donor's level and edge presence in one traversal.
 			for (auto const &[node, neighbours] : *donor_graph) {
 				donor_has_edges = donor_has_edges || !neighbours.empty();
-				for (auto const &[neighbour, level] : neighbours)
+				for (auto const &[neighbour, level] : neighbours) {
 					donor_level = max(donor_level, level);
+				}
 			}
 			ssize_t new_edge_level = 0;
 
@@ -451,63 +534,28 @@ bool rgc_replace_edge(long id, char const *result_name,
 			// The result owns an independent copy of the vertex-number
 			// allocator.
 			NodeNumbers result_numbers = recipient_data->second;
-			auto &[next_unused, free_nodes] = result_numbers;
 
-			// Remove the edge w_1 - w_2 from the resulting graph.
+			// Remove the edge w_1 - w_2 from the result graph.
 			result_graph.find(w_1)->second.erase(w_2);
 			result_graph.find(w_2)->second.erase(w_1);
 
 			// The map associates each vertex of the donor graph
-			// with its corresponding vertex in the resulting graph.
-			unordered_map<Node, Node> node_mapping;
+			// with its corresponding vertex in the result graph.
+			NodeMapping node_mapping;
 			node_mapping.reserve(donor_graph->size());
 
 			node_mapping.emplace(v_1, w_1);
 			node_mapping.emplace(v_2, w_2);
 
-			Node next_free = 0;
-			// Retain the scan position to avoid rescanning occupied numbers.
-			auto occupied_it = result_graph.begin();
-			// The ordered map assigns new numbers in ascending donor-vertex
-			// order.
-			for (auto const &[donor_node, neighbours] : *donor_graph) {
-				if (donor_node != v_1 && donor_node != v_2) {
-					// Find the smallest unused vertex number.
-					while (occupied_it != result_graph.end() &&
-						   occupied_it->first == next_free) {
-						++next_free;
-						++occupied_it;
-					}
+			// Add the remaining donor nodes and build mapping.
+			add_donor_nodes(*donor_graph, result_graph, result_numbers,
+							node_mapping);
 
-					node_mapping.emplace(donor_node, next_free);
-					result_graph.try_emplace(occupied_it, next_free);
-					// Update the numbering data by filling a gap or extending
-					// the range.
-					if (next_free < next_unused)
-						free_nodes.erase(next_free);
-					else
-						next_unused = next_free + 1;
-					++next_free;
-				}
-			}
+			// Add donor edges with their new level.
+			add_donor_edges(*donor_graph, result_graph, node_mapping,
+							new_edge_level);
 
-			// All donor edges receive the new level, regardless of their old
-			// levels.
-			for (auto const &[donor_node, neighbours] : *donor_graph) {
-				if (neighbours.empty())
-					continue;
-				Node mapped_node = node_mapping.find(donor_node)->second;
-				auto &mapped_neighbours =
-					result_graph.find(mapped_node)->second;
-
-				for (auto const &[donor_neighbour, level] : neighbours) {
-					Node mapped_neighbour =
-						node_mapping.find(donor_neighbour)->second;
-					mapped_neighbours.emplace(mapped_neighbour, new_edge_level);
-				}
-			}
-
-			// Reuse the insertion position after validation and construction.
+			// Insert the completed graph into the collection
 			collection->emplace_hint(
 				result_position, result_name,
 				GraphData{std::move(result_graph), std::move(result_numbers)});
