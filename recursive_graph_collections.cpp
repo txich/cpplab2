@@ -50,14 +50,6 @@ Collections &collections() {
 	return data;
 }
 
-// GCC reserve priorities 0--100 for the runtime. Initialize before
-// ordinary global objects so the state outlives their destructors.
-constexpr int INITIALIZATION_PRIORITY = 101;
-
-[[gnu::constructor(INITIALIZATION_PRIORITY)]] void initialize_collections() {
-	(void)collections();
-}
-
 Collection *find_collection(long id) {
 	auto &all = collections();
 	auto it = all.find(id);
