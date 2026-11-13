@@ -12,6 +12,8 @@ Requirements: Python 3, a C23 compiler, and a C++23 compiler and standard librar
 `g++`; override them with `CC` and `CXX` if necessary. No Python packages are
 required. Build outputs are placed in a temporary directory and removed on exit.
 
+The C and C++ example programs used by the runner are in [examples/](examples/).
+
 The runner tests `LEVEL_MAX=1,2,4,16`. Use `--levels 1 4` to select values for the
 custom tests. The supplied examples always run with their expected levels, 4 and
 16. `--sanitize` enables UndefinedBehaviorSanitizer for the module and executables.
@@ -33,7 +35,7 @@ Coverage includes:
 
 The tests do not allocate `INT_MAX` vertices or exhaust all `long` identifiers.
 Iteration tests also check that `rgc_next_graph` returns the smallest name
-greater than the query when that query is absent, as clarified on the forum.
+greater than the query when that query is absent.
 Compiler warnings remain visible and do not fail the run automatically.
 
 ## Large graphs

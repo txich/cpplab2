@@ -11,7 +11,8 @@ import tempfile
 from model_test import test as test_model
 
 
-ROOT = Path(__file__).resolve().parent.parent
+TESTS = Path(__file__).resolve().parent
+ROOT = TESTS.parent
 
 
 def run(command):
@@ -70,7 +71,7 @@ def main():
             source = "stress_test.cpp" if args.stress else "recursive_graph_collections_test.cpp"
             run(cpp + options + [
                 "-std=c++23", f"-DLEVEL_MAX={level}", "-I", ROOT,
-                ROOT / "tests" / source, obj,
+                TESTS / source, obj,
                 "-o", binary,
             ])
             run([binary, args.edges] if args.stress else [binary])
@@ -88,7 +89,7 @@ def main():
         c_example = build / "example_c.o"
         run(cc + options + [
             "-std=c23", "-I", ROOT, "-c",
-            ROOT / "recursive_graph_collections_example_1.c", "-o", c_example,
+            TESTS / "examples" / "recursive_graph_collections_example_1.c", "-o", c_example,
         ])
         c_binary = build / "example_c"
         run(cpp + options + [c_example, build_module(4), "-o", c_binary])
@@ -98,7 +99,7 @@ def main():
         cpp_example = build / "example_cpp.o"
         run(cpp + options + [
             "-std=c++23", "-I", ROOT, "-c",
-            ROOT / "recursive_graph_collections_example_2.cpp", "-o", cpp_example,
+            TESTS / "examples" / "recursive_graph_collections_example_2.cpp", "-o", cpp_example,
         ])
         module = build_module(16)
         for index, order in enumerate(((cpp_example, module), (module, cpp_example))):
